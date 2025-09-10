@@ -1,11 +1,12 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import os
-import time
 import subprocess
 import requests
 import sys
+import time
 
 TOR_BASE_DIR = "/root/tor-single"
 TOR_PORT = 9054
@@ -31,16 +32,28 @@ def start_tor(country_code):
             f.write(f"DataDirectory {data_dir}\n")
             f.write(f"ExitNodes {{{country_code}}}\n")
             f.write("StrictNodes 1\n")
+            f.write("Log notice stdout\n")
 
     # بستن هر تور قبلی با همین کانفیگ
     subprocess.run(f"pkill -f 'tor -f {torrc_path}'", shell=True)
 
-    # اجرای تور
-    subprocess.Popen(f"tor -f {torrc_path}", shell=True)
-    print(f"[*] Starting Tor for {country_code} on port {TOR_PORT}...")
-    time.sleep(20)  # صبر تا تور کانکشن بسازه
+    # اجرای تور و گرفتن لاگ
+    proc = subprocess.Popen(f"tor -f {torrc_path}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
-    print(f"[+] Tor {country_code} started, IP: {ma_ip(TOR_PORT)}")
+    print(f"[*] Starting Tor for {country_code} on port {TOR_PORT}...")
+
+    # صبر تا Bootstrapped 100%
+    while True:
+        line = proc.stdout.readline()
+        if not line:
+            time.sleep(0.1)
+            continue
+        print(line.strip())
+        if "Bootstrapped 100%" in line:
+            break
+
+    print(f"[+] Tor {country_code} ready, IP: {ma_ip(TOR_PORT)}")
+    return proc
 
 if __name__ == "__main__":
     os.system("clear")
@@ -49,4 +62,8 @@ if __name__ == "__main__":
         print("[-] No country code entered!")
         sys.exit(1)
 
-    start_tor(country)
+    tor_proc = start_tor(country)
+
+    input("[*] Press Enter to stop Tor...")
+    tor_proc.terminate()
+    print("[+] Tor stopped.")
