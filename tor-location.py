@@ -2,53 +2,51 @@
 # -*- coding: utf-8 -*-
 
 import os
-import subprocess
 import time
+import subprocess
 import requests
-import socks
-import socket
+import sys
 
-TOR_BASE_DIR = "/root/tor-test"
+TOR_BASE_DIR = "/root/tor-single"
 TOR_PORT = 9054
 
-def create_tor_instance(country_code):
+def ma_ip(port):
+    url = "http://checkip.amazonaws.com"
+    proxies = {"http": f"socks5://127.0.0.1:{port}", "https": f"socks5://127.0.0.1:{port}"}
+    try:
+        r = requests.get(url, proxies=proxies, timeout=10)
+        return r.text.strip()
+    except:
+        return "Cannot connect"
+
+def start_tor(country_code):
     data_dir = os.path.join(TOR_BASE_DIR, country_code)
-    torrc_path = f"/tmp/torrc-{country_code}.conf"
+    torrc_path = os.path.join(data_dir, f"torrc-{country_code}.conf")
 
     os.makedirs(data_dir, exist_ok=True)
 
-    torrc_content = f"""
-SocksPort {TOR_PORT}
-DataDirectory {data_dir}
-ExitNodes {{{country_code}}}
-StrictNodes 1
-Log notice stdout
-"""
-    with open(torrc_path, "w") as f:
-        f.write(torrc_content.strip())
+    if not os.path.isfile(torrc_path):
+        with open(torrc_path, "w") as f:
+            f.write(f"SocksPort {TOR_PORT}\n")
+            f.write(f"DataDirectory {data_dir}\n")
+            f.write(f"ExitNodes {{{country_code}}}\n")
+            f.write("StrictNodes 1\n")
 
-    print(f"[+] Starting Tor with exit node {country_code} on port {TOR_PORT} ...")
-    proc = subprocess.Popen(["tor", "-f", torrc_path])
-    return proc
+    # بستن هر تور قبلی با همین کانفیگ
+    subprocess.run(f"pkill -f 'tor -f {torrc_path}'", shell=True)
 
-def get_ip_via_tor():
-    socks.set_default_proxy(socks.SOCKS5, "127.0.0.1", TOR_PORT)
-    socket.socket = socks.socksocket
-    try:
-        ip = requests.get("https://api.ipify.org", timeout=10).text
-        return ip
-    except Exception as e:
-        return f"Error: {e}"
+    # اجرای تور
+    subprocess.Popen(f"tor -f {torrc_path}", shell=True)
+    print(f"[*] Starting Tor for {country_code} on port {TOR_PORT}...")
+    time.sleep(20)  # صبر تا تور کانکشن بسازه
+
+    print(f"[+] Tor {country_code} started, IP: {ma_ip(TOR_PORT)}")
 
 if __name__ == "__main__":
-    code = input("Enter country code (e.g. FR, DE, US): ").strip().upper()
-    proc = create_tor_instance(code)
+    os.system("clear")
+    country = input("Enter country code (e.g. FR, DE, US): ").strip().upper()
+    if not country:
+        print("[-] No country code entered!")
+        sys.exit(1)
 
-    print("[*] Waiting for Tor to establish circuit...")
-    time.sleep(20)  # صبر می‌کنیم تا تور کامل وصل بشه
-
-    ip = get_ip_via_tor()
-    print(f"[+] Your Tor exit IP for {code}: {ip}")
-
-    # اگر بخوای تور رو بعد تست ببندی:
-    # proc.terminate()
+    start_tor(country)
